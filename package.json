@@ -1,0 +1,22 @@
+{
+  "name": "recurrent-ton-transfers",
+  "description": "Recurrent transfers on TON.",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "nodemon -q --exec ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "shutock.eth <yo@shutock.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@ton/crypto": "^3.2.0",
+    "@ton/ton": "^13.11.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.2"
+  }
+}
