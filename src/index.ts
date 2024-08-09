@@ -1,65 +1,65 @@
-import { TonClient, WalletContractV4, internal } from "@ton/ton";
-import { mnemonicToPrivateKey } from "@ton/crypto";
+import TonWeb from "tonweb";
 
-const updateTime = new Date();
+import dotenv from "dotenv";
 
-// ! FILL THIS ↓
-const mnemonics = ["word1", "word2", "...", "word23", "word24"]; // 24 words
-const value = "0.01337"; // amount in TON
-const to = "UQ..."; // recipient address
-const updateInterval = 1000 * 60 * 60 * 24; // 24 hours
-updateTime.setUTCHours(12, 0, 0, 0); // send time in UTC
-// ! FILL THIS ↑
+import { initWallet } from "./lib";
 
-const client = new TonClient({
-  endpoint: "https://toncenter.com/api/v2/jsonRPC",
-});
+const { JettonWallet } = TonWeb.token.jetton;
 
-// bottleneck to avoid rate limits (officially 1 req per second, but in practice 1 req per 3 seconds)
-const bottleneck = () =>
-  new Promise((resolve) =>
-    setTimeout(resolve, client.parameters.apiKey ? 0 : 3000)
+const jettonWalletAddress = "kQBnLQClf4K3xBml_4v8c2Yd9-5wEcLVfnt8P4vjO145h04P";
+
+dotenv.config();
+const mnemonic = process.env.MNEMONIC?.split(" ");
+if (!mnemonic) throw new Error("MNEMONIC env variable is required");
+
+const transferJetton = async (to: string, amount: number) => {
+  const { secretKey } = await initWallet();
+
+  const tonweb = new TonWeb(
+    new TonWeb.HttpProvider("https://testnet.toncenter.com/api/v2/jsonRPC")
   );
 
-const printStatus = (status: string, balance: bigint) => {
-  console.clear();
-  console.log(`\r${status}`);
-  console.log(`Balance: ${Number(balance) / 10e8}\n`);
+  const keyPair = TonWeb.utils.nacl.sign.keyPair.fromSecretKey(secretKey);
+
+  const WalletClass = tonweb.wallet.all["v4R2"];
+
+  const wallet = new WalletClass(tonweb.provider, {
+    publicKey: keyPair.publicKey,
+  });
+
+  const seqno = (await wallet.methods.seqno().call()) || 0;
+
+  const comment = new Uint8Array([
+    ...new Uint8Array(4),
+    ...new TextEncoder().encode("gift"),
+  ]);
+
+  const jettonWallet = new JettonWallet(tonweb.provider, {
+    address: jettonWalletAddress,
+  });
+
+  console.log(
+    await wallet.methods
+      .transfer({
+        sendMode: 1,
+        secretKey: keyPair.secretKey,
+        toAddress: jettonWalletAddress,
+        amount: TonWeb.utils.toNano("0.1"),
+        seqno: seqno,
+        payload: await jettonWallet.createTransferBody({
+          toAddress: new TonWeb.utils.Address(to),
+          tokenAmount: TonWeb.utils.toNano("500"),
+          forwardAmount: TonWeb.utils.toNano("0.0005"),
+          forwardPayload: comment,
+          responseAddress: new TonWeb.utils.Address(to),
+        }),
+      })
+      .send()
+  );
 };
 
-const run = async () => {
-  try {
-    // init wallet from mnemonics
-    const { publicKey, secretKey } = await mnemonicToPrivateKey(mnemonics);
-    const wallet = WalletContractV4.create({ workchain: 0, publicKey });
-    const contract = client.open(wallet);
-
-    // get balance
-    await bottleneck();
-    printStatus("Sending...", await contract.getBalance());
-
-    // get sequence number for the next transfer (necessary for ton)
-    await bottleneck();
-    const seqno = await contract.getSeqno();
-
-    // transfer tokens
-    await bottleneck();
-    const messages = [internal({ value, to, body: "Lorem ipsum" })];
-    await contract.sendTransfer({ seqno, secretKey, messages });
-
-    // get balance
-    await bottleneck();
-    printStatus("Sent!", await contract.getBalance());
-
-    // schedule next run
-    console.log(`Next run in ${updateInterval / 1000}s`);
-    setTimeout(run, updateInterval);
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-const timeToFirstRun = updateTime.getTime() - Date.now();
-console.log(`Time to first run: ${Math.floor(timeToFirstRun / 1000)}s\n`);
-
-setTimeout(run, timeToFirstRun);
+(async () => {
+  console.log("Sending jetton...");
+  await transferJetton("0QBt8J4HItTLQ4fU5uPkmzHkUoBThsJVEfInMzn21Ukxkpmy", 10);
+  console.log("Jetton sent!");
+})();
